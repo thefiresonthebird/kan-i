@@ -1,23 +1,11 @@
-# Kan-i
+# Kan-I
 
-Kan-i is a Python-based command-line tool designed to programmatically check your Kubernetes capabilities. It iterates through all available API resources and standard Kubernetes verbs to give you a comprehensive matrix of exactly what permissions you have. 
+This idea for this project came about when I was trying to demonstrate a privilege escalation vulnerability in an EKS cluster. When trying to run `kubectl auth can-i --list` it was always return no permissions with the message: The error message: `Warning: the list may be incomplete: webhook authorizer does not support user rule resolution.`. Yet when running specific `kubectl auth can-i <verb> <resource>` it would correctly repsond yes/no, so I threw this together to get a full list when `kubectl` won't do it for me. 
 
-It acts as a robust alternative to `kubectl auth can-i --list`, which can sometimes fail or be restricted depending on your cluster's Role-Based Access Control (RBAC) settings. Kan-i tackles this by making individual `kubectl auth can-i <verb> <resource>` requests concurrently.
-
-## Features
-
-- **Comprehensive Permission Matrix**: Cycles through all accessible Kubernetes resources and standard verbs (get, list, watch, create, update, patch, delete, use, bind, escalate, etc.).
-- **Namespace Scope**: Run checks within your current namespace, a specific namespace, or across all namespaces in the cluster.
-- **Concurrent Execution**: Uses a thread pool to rapidly execute the necessary `kubectl` commands.
-- **Token Authentication**: Supports passing a specific API bearer token for authentication.
-- **Clear Output**: Formats results into an easy-to-read table.
-- **Graceful Error Handling**: Provides clear error messages for cluster connectivity drops, authorization issues, or a missing kubeconfig.
 
 ## Prerequisites
 
-- Python 3.x
-- `kubectl` installed and configured in your `$PATH`
-- A valid kubeconfig or an authentication token
+Kan-I uses Python 3 and assumes you have `kubectl` setup and working on your machine with a valid kubeconfig file. By default, it will use the authentiation and namespace from the current-context in your kubeconfig file, but you can pass a bearer token, set a namespace, or check all namespaces to set these yourself.
 
 ## Usage
 
@@ -36,7 +24,7 @@ python3 kan_i.py [OPTIONS]
 
 ### Examples
 
-**Check permissions in the current namespace:**
+**Check permissions using the current context:**
 ```bash
 python3 kan_i.py
 ```
@@ -56,9 +44,3 @@ python3 kan_i.py -A
 python3 kan_i.py --token <your-service-account-token>
 ```
 
-## How It Works
-
-1. **Cluster Access Check**: Validates your connection or token by retrieving the available API resources via `kubectl api-resources`.
-2. **Context Discovery**: Determines your current authenticated user and the target namespace(s).
-3. **Concurrent Processing**: Spins up multiple threads to query `kubectl auth can-i <verb> <resource>` for every permutation of verbs and resources.
-4. **Result Aggregation**: Filters out the "no" responses and tabulates the allowed actions, sorting them alphabetically for readability.

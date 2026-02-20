@@ -5,7 +5,6 @@ import subprocess
 import sys
 import concurrent.futures
 
-# Comprehensive list of standard Kubernetes verbs
 VERBS = [
     "get", "list", "watch", "create", "update", "patch", "delete",
     "deletecollection", "use", "bind", "escalate", "impersonate"
@@ -39,7 +38,6 @@ def check_cluster_access(token):
     
     if rc != 0:
         error_msg = stderr if stderr else "Unknown error connecting to cluster."
-        # Clean up the error message to be more concise
         if "error: You must be logged in to the server" in error_msg:
             print("Error: Unauthorized. Please check your credentials or token.")
         elif "connection refused" in error_msg.lower() or "no route to host" in error_msg.lower():
@@ -59,7 +57,7 @@ def get_current_user(token):
     stdout, _, rc = run_command(cmd)
     if rc == 0 and stdout:
         return stdout
-    # Fallback if whoami fails (e.g., older cluster version)
+    # Fallback if whoami fails
     return "current"
 
 def get_current_namespace(token):
@@ -93,23 +91,20 @@ def check_permission(verb, resource, namespace, token):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Programmatically check Kubernetes capabilities by cycling through verbs and resources."
+        description="Check user's permissions by cycling through verbs and resources."
     )
     parser.add_argument("--token", help="Bearer token for authentication to the API server")
-    parser.add_argument("-n", "--namespace", help="If present, the namespace scope for this CLI request")
-    parser.add_argument("-A", "--all-namespaces", action="store_true", 
-                        help="If present, list permissions across all namespaces")
+    parser.add_argument("-n", "--namespace", help="List permissions for a specific namespace")
+    parser.add_argument("-A", "--all-namespaces", action="store_true", help="List permissions across all namespaces")
     
     args = parser.parse_args()
 
-    # Verify connection and get resources
     resources = check_cluster_access(args.token)
     
     user = get_current_user(args.token)
 
     namespaces_to_check = []
     is_multi_namespace = args.all_namespaces
-
     if is_multi_namespace:
         namespaces_to_check = get_all_namespaces(args.token)
         print(f"The {user} user has the following permissions across all namespaces:")
@@ -120,33 +115,28 @@ def main():
             namespaces_to_check = [get_current_namespace(args.token)]
         print(f"The {user} user has the following permissions in the {namespaces_to_check[0]} namespace:")
 
-    # Table Header
     if is_multi_namespace:
         print(f"{'NAMESPACE':<20} {'RESOURCE':<40} {'VERBS'}")
     else:
         print(f"{'RESOURCE':<40} {'VERBS'}")
 
-    # To store futures
-    future_to_check = {}
+    next_check = {}
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         for ns in namespaces_to_check:
-            # We want to keep track of allowed verbs per resource
             ns_results = {res: [] for res in resources}
             
             for res in resources:
                 for verb in VERBS:
-                    future = executor.submit(check_permission, verb, res, ns, args.token)
-                    future_to_check[future] = (ns, res, verb)
+                    check = executor.submit(check_permission, verb, res, ns, args.token)
+                    next_check[check] = (ns, res, verb)
             
-            for future in concurrent.futures.as_completed(future_to_check):
-                ns, res, verb = future_to_check[future]
-                _, _, is_allowed = future.result()
+            for check in concurrent.futures.as_completed(next_check):
+                ns, res, verb = next_check[check]
+                _, _, is_allowed = check.result()
                 if is_allowed:
                     ns_results[res].append(verb)
             
-            # Print results as they finish for a namespace
-            # Sort resources and verbs alphabetically for neatness
             for res in sorted(ns_results.keys()):
                 allowed_verbs = sorted(ns_results[res])
                 if allowed_verbs:
@@ -156,8 +146,7 @@ def main():
                     else:
                         print(f"{res:<40} {verbs_str}")
             
-            # Clear futures for the next namespace or finish
-            future_to_check.clear()
+            next_check.clear()
 
 if __name__ == "__main__":
     main()
