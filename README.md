@@ -18,9 +18,9 @@ python3 kan_i.py [OPTIONS]
 | Option | Short | Description |
 | :--- | :--- | :--- |
 | `--help` | `-h` | Show the help message and exit. |
-| `--token TOKEN` | | Bearer token for authentication to the Kubernetes API server. By default, it uses your current kubeconfig context. |
-| `--namespace NAMESPACE` | `-n` | The specific namespace scope to check permissions against. |
-| `--all-namespaces` | `-A` | List permissions across all available namespaces in the cluster. |
+| `--token TOKEN` | | Bearer token for authentication to the API server |
+| `--namespace NAMESPACE` | `-n` | List permissions for a specific namespace |
+| `--all-namespaces` | `-A` | List permissions across all namespaces |
 
 ### Examples
 

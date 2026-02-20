@@ -93,9 +93,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Check user's permissions by cycling through verbs and resources."
     )
-    parser.add_argument("--token", help="Bearer token for authentication to the API server")
-    parser.add_argument("-n", "--namespace", help="List permissions for a specific namespace")
-    parser.add_argument("-A", "--all-namespaces", action="store_true", help="List permissions across all namespaces")
+    parser.add_argument("--token", help="bearer token for authentication to the API server")
+    parser.add_argument("-n", "--namespace", help="list permissions for a specific namespace")
+    parser.add_argument("-A", "--all-namespaces", action="store_true", help="list permissions across all namespaces")
     
     args = parser.parse_args()
 
