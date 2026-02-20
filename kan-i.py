@@ -53,7 +53,7 @@ def check_cluster_access(token):
 
 def get_current_user(token):
     """Get the current authenticated user."""
-    cmd = base_kubectl_cmd(token) + ["auth", "whoami"]
+    cmd = base_kubectl_cmd(token) + ["auth", "whoami", "-o", "jsonpath={.status.userInfo.username}"]
     stdout, _, rc = run_command(cmd)
     if rc == 0 and stdout:
         return stdout
@@ -107,18 +107,18 @@ def main():
     is_multi_namespace = args.all_namespaces
     if is_multi_namespace:
         namespaces_to_check = get_all_namespaces(args.token)
-        print(f"The {user} user has the following permissions across all namespaces:")
+        print(f"The \"{user}\" user has the following permissions across all namespaces:")
     else:
         if args.namespace:
             namespaces_to_check = [args.namespace]
         else:
             namespaces_to_check = [get_current_namespace(args.token)]
-        print(f"The {user} user has the following permissions in the {namespaces_to_check[0]} namespace:")
+        print(f"The \"{user}\" user has the following permissions in the \"{namespaces_to_check[0]}\" namespace:")
 
     if is_multi_namespace:
         print(f"{'NAMESPACE':<20} {'RESOURCE':<40} {'VERBS'}")
     else:
-        print(f"{'RESOURCE':<40} {'VERBS'}")
+        print(f"{'RESOURCE':<50} {'VERBS'}")
 
     next_check = {}
 
@@ -142,9 +142,9 @@ def main():
                 if allowed_verbs:
                     verbs_str = f"[{', '.join(allowed_verbs)}]"
                     if is_multi_namespace:
-                        print(f"{ns:<20} {res:<40} {verbs_str}")
+                        print(f"{ns:<20} {res:<50} {verbs_str}")
                     else:
-                        print(f"{res:<40} {verbs_str}")
+                        print(f"{res:<50} {verbs_str}")
             
             next_check.clear()
 
