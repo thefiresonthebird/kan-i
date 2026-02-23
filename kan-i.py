@@ -4,14 +4,40 @@ import argparse
 import subprocess
 import sys
 import concurrent.futures
+import time
 
 VERBS = [
     "get", "list", "watch", "create", "update", "patch", "delete",
     "deletecollection", "use", "bind", "escalate", "impersonate"
 ]
 
+VERBS_REDUCED = [
+    "get", "list", "watch", "create", "update", "patch", "delete"
+]
+
+is_debug = False
+
+def print_progress_bar(completed, total, start_time, bar_length=40):
+    """Print a dynamic progress bar to the terminal."""
+    elapsed = time.time() - start_time
+    mins, secs = divmod(int(elapsed), 60)
+    time_str = f"{mins:02d}:{secs:02d}"
+    
+    percent = completed / total if total > 0 else 1.0
+    filled = int(bar_length * percent)
+    bar = '=' * filled + '-' * (bar_length - filled)
+    
+    sys.stdout.write(f"\r[{bar}] {completed}/{total} | {time_str} | ")
+    sys.stdout.flush()
+
+    if completed == total and total > 0:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
 def run_command(cmd):
     """Run a shell command and return its stdout, stderr, and return code."""
+    if is_debug:
+        print(f"Running command: {' '.join(cmd)}")
     try:
         result = subprocess.run(
             cmd,
@@ -49,7 +75,7 @@ def check_cluster_access(token):
         sys.exit(1)
         
     resources = stdout.split('\n')
-    return [r for r in resources if r]
+    return [r for r in resources if r and "subject" not in r]
 
 def get_current_user(token):
     """Get the current authenticated user."""
@@ -96,33 +122,45 @@ def main():
     parser.add_argument("--token", help="bearer token for authentication to the API server")
     parser.add_argument("-n", "--namespace", help="list permissions for a specific namespace")
     parser.add_argument("-A", "--all-namespaces", action="store_true", help="list permissions across all namespaces")
+    parser.add_argument("-t", "--threads", type=int, default=20, help="maximum number of concurrent threads")
+    parser.add_argument("-d", "--debug", action="store_true", help="enable debug mode")
     
     args = parser.parse_args()
 
     resources = check_cluster_access(args.token)
-    
     user = get_current_user(args.token)
 
-    namespaces_to_check = []
     is_multi_namespace = args.all_namespaces
+    global is_debug
+    is_debug = args.debug
+    if is_debug:
+        print(f"Debug mode enabled")
+    output_lines = []
+
     if is_multi_namespace:
         namespaces_to_check = get_all_namespaces(args.token)
-        print(f"The \"{user}\" user has the following permissions across all namespaces:")
+        output_lines.append(f"\n\nThe \"{user}\" user has the following permissions across all namespaces:")
+        output_lines.append(f"{'NAMESPACE':<20} {'RESOURCE':<50} {'VERBS'}")
     else:
         if args.namespace:
             namespaces_to_check = [args.namespace]
         else:
             namespaces_to_check = [get_current_namespace(args.token)]
-        print(f"The \"{user}\" user has the following permissions in the \"{namespaces_to_check[0]}\" namespace:")
-
-    if is_multi_namespace:
-        print(f"{'NAMESPACE':<20} {'RESOURCE':<40} {'VERBS'}")
-    else:
-        print(f"{'RESOURCE':<50} {'VERBS'}")
+        output_lines.append(f"\n\nThe \"{user}\" user has the following permissions in the \"{namespaces_to_check[0]}\" namespace:")
+        output_lines.append(f"{'RESOURCE':<50} {'VERBS'}")
 
     next_check = {}
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+    total_checks = len(resources) * len(VERBS) * len(namespaces_to_check)
+    completed_checks = 0
+    start_time = time.time()
+    
+    if total_checks > 0:
+        print(f"Starting {total_checks} permission checks...")
+        if not is_debug:
+            print_progress_bar(completed_checks, total_checks, start_time)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.threads) as executor:
         for ns in namespaces_to_check:
             ns_results = {res: [] for res in resources}
             
@@ -136,17 +174,26 @@ def main():
                 _, _, is_allowed = check.result()
                 if is_allowed:
                     ns_results[res].append(verb)
+                
+                completed_checks += 1
+                if not is_debug:
+                    print_progress_bar(completed_checks, total_checks, start_time)
             
             for res in sorted(ns_results.keys()):
                 allowed_verbs = sorted(ns_results[res])
                 if allowed_verbs:
-                    verbs_str = f"[{', '.join(allowed_verbs)}]"
-                    if is_multi_namespace:
-                        print(f"{ns:<20} {res:<50} {verbs_str}")
+                    if len(allowed_verbs) == len(VERBS):
+                        verbs_str = "[*]"
                     else:
-                        print(f"{res:<50} {verbs_str}")
+                        verbs_str = f"[{', '.join(allowed_verbs)}]"
+                    if is_multi_namespace:
+                        output_lines.append(f"{ns:<20} {res:<50} {verbs_str}")
+                    else:
+                        output_lines.append(f"{res:<50} {verbs_str}")
             
             next_check.clear()
+
+    print("\n".join(output_lines))
 
 if __name__ == "__main__":
     main()
